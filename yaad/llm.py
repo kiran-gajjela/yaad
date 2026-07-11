@@ -32,6 +32,9 @@ class OllamaLLM(BaseLLM):
         payload = {
             "model": self.model,
             "stream": False,
+            "think": False,  # thinking models (e.g. gemma4) can burn the whole
+                              # token budget reasoning and return empty content;
+                              # yaad only ever uses the final answer, not the trace.
             "messages": [{"role": "system", "content": system}, *messages],
             "options": {"num_predict": max_tokens, "temperature": 0.2},
         }

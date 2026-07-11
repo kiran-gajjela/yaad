@@ -97,6 +97,50 @@ def _overlap_frac(a: tuple[int, int], b: tuple[int, int]) -> float:
     return inter / max(1, (a[1] - a[0] + 1))
 
 
+FULL_RANGE_CHUNK_CAP = 20
+
+
+def chunks_in_range(
+    con: sqlite3.Connection,
+    sender: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    """All chunks matching sender/date filters, chronological, unranked.
+
+    hybrid_search ranks by relevance to a query string, which works for
+    topical questions but actively drops valid matches for non-topical
+    ones like "summarize last week" - most chunks in range won't literally
+    contain words like "summarize"/"last"/"week", so BM25/dense scores them
+    low even though they satisfy the filter perfectly. When filtering alone
+    narrows the candidate set to something small, skip ranking and use it
+    all instead of gambling on relevance scoring.
+    """
+    sql = ["SELECT * FROM chunks WHERE 1=1"]
+    params: list = []
+    if sender:
+        sql.append("AND senders LIKE ?")
+        params.append(f"%{sender}%")
+    if date_from:
+        sql.append("AND end_ts >= ?")
+        params.append(date_from)
+    if date_to:
+        sql.append("AND start_ts <= ?")
+        params.append(date_to + " 23:59:59")
+    sql.append("ORDER BY start_ts")
+    rows = con.execute(" ".join(sql), params).fetchall()
+
+    results: list[dict] = []
+    taken_ranges: list[tuple[int, int]] = []
+    for row in rows:
+        rng = (row["start_msg"], row["end_msg"])
+        if any(_overlap_frac(rng, t) > 0.5 for t in taken_ranges):
+            continue
+        taken_ranges.append(rng)
+        results.append(dict(row))
+    return results
+
+
 def hybrid_search(
     con: sqlite3.Connection,
     query: str,

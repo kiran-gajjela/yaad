@@ -31,7 +31,12 @@ Convenience views (prefer these when they fit):
   v_reply_times(sender, reply_minutes)   -- one row per reply, capped at 240 min
 
 Notes: always exclude is_system=1 from people-stats; use LIKE for fuzzy
-text matching; strftime works on ts.
+text matching; strftime works on ts. Each view above has ONLY the columns
+listed for it - e.g. v_sender_stats has no `id`/`text`/`date`/`is_media`
+column, only `sender, messages, media, avg_chars, first_day, last_day`.
+Never reference a messages/sessions column against a view unless that
+exact column is listed for that view. If you need raw per-message columns
+(id, text, is_media, date, ts), query the messages table directly instead.
 """.strip()
 
 

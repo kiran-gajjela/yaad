@@ -13,7 +13,7 @@ from datetime import date
 from .analytics import SCHEMA_DOC, rows_to_text, run_readonly_sql
 from .db import connect
 from .llm import BaseLLM
-from .retrieve import hybrid_search
+from .retrieve import FULL_RANGE_CHUNK_CAP, chunks_in_range, hybrid_search
 from .router import Route, route_query
 
 SQLGEN_SYSTEM = f"""You write exactly one read-only SQLite query for a WhatsApp chat database.
@@ -28,8 +28,12 @@ Return ONLY the SQL."""
 
 ANSWER_SYSTEM = """You are yaad, answering questions about the user's own WhatsApp chat export.
 Rules:
-- Ground every claim in the provided excerpts / stats. Cite like (Rohan, 2025-10-12).
-- If the answer isn't in the context, say so plainly - never invent chat content.
+- Ground every claim in the provided excerpts / stats only - never state a claim you
+  cannot point to in the context above, and never invent chat content.
+- Cite each claim as (sender, date), using the exact sender name and date shown in the
+  excerpt or stats row that claim came from - pull both values from the context every
+  single time. Never reuse a name or date from these instructions themselves.
+- If the answer isn't in the context, say so plainly.
 - Be concise and match the user's tone. Numbers from stats should be exact."""
 
 MAX_HISTORY = 3
@@ -82,27 +86,44 @@ class Engine:
         context_parts: list[str] = []
         sources: list[str] = []
         sql_used: str | None = None
+        sql_failed = False
 
-        if route.intent in ("search", "both"):
-            blocks = hybrid_search(
-                self.con,
-                route.search_query or question,
-                top_k=6,
-                sender=route.sender,
-                date_from=route.date_from,
-                date_to=route.date_to,
-                dense_searcher=self.dense,
+        if route.intent in ("analytics", "both"):
+            sql_used, result_text = self._run_analytics(
+                route.analytics_question or question, sender=route.sender
             )
+            context_parts.append(f"--- stats SQL ---\n{sql_used}\n--- result ---\n{result_text}")
+            sql_failed = result_text.startswith("(query failed")
+
+        # If a pure-analytics question's SQL genuinely fails, the router likely
+        # misclassified something whose numbers only exist as free text (e.g.
+        # "what's the total budget") - fall back to search instead of leaving
+        # the user with a broken/empty stats result.
+        if route.intent in ("search", "both") or (route.intent == "analytics" and sql_failed):
+            blocks = []
+            if route.date_from or route.date_to:
+                ranged = chunks_in_range(
+                    self.con, sender=route.sender,
+                    date_from=route.date_from, date_to=route.date_to,
+                )
+                if 0 < len(ranged) <= FULL_RANGE_CHUNK_CAP:
+                    blocks = ranged
+            if not blocks:
+                blocks = hybrid_search(
+                    self.con,
+                    route.search_query or question,
+                    top_k=6,
+                    sender=route.sender,
+                    date_from=route.date_from,
+                    date_to=route.date_to,
+                    dense_searcher=self.dense,
+                )
             for b in blocks:
                 span = f"{b['start_ts'][:10]} to {b['end_ts'][:10]}"
                 context_parts.append(f"--- excerpt ({span}; {b['senders']}) ---\n{b['text']}")
                 sources.append(f"{span} · {b['senders']}")
             if not blocks:
                 context_parts.append("--- no matching messages found ---")
-
-        if route.intent in ("analytics", "both"):
-            sql_used, result_text = self._run_analytics(route.analytics_question or question)
-            context_parts.append(f"--- stats SQL ---\n{sql_used}\n--- result ---\n{result_text}")
 
         prompt = (
             "\n\n".join(context_parts)
@@ -120,8 +141,13 @@ class Engine:
 
     # ------------------------------------------------------------- internal
 
-    def _run_analytics(self, question: str) -> tuple[str, str]:
+    def _run_analytics(self, question: str, sender: str | None = None) -> tuple[str, str]:
         prompt = question
+        if sender:
+            # The router already resolved this - the SQL-gen model gets it as
+            # an explicit hint instead of having to re-notice the name itself
+            # in the question text (see route.sender vs. hybrid_search).
+            prompt += f"\n\n(This is specifically about the sender named exactly {sender!r} - filter for it.)"
         sql = ""
         err = ""
         for _ in range(2):  # one retry with the error fed back
