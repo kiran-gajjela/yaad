@@ -26,13 +26,17 @@ for _stream in (sys.stdout, sys.stderr):
 console = Console()
 
 _THINKING_PHRASES = (
-    "thinking...",
-    "digging through your chats...",
-    "recalling the details...",
-    "connecting the dots...",
-    "checking who said what...",
-    "reading between the lines...",
-    "almost there...",
+    "Love me. — Homelander, The Boys",
+    "Valar Morghulis. — Braavos, Game of Thrones",
+    "Valar Dohaeris. — A man with no face",
+    "I am the one who knocks. — Walter White, Breaking Bad",
+    "Say my name. — Walter White, Breaking Bad",
+    "Winter is coming. — House Stark, Game of Thrones",
+    "Not today. — Arya Stark, Game of Thrones",
+    "Bazinga! — Sheldon Cooper, The Big Bang Theory",
+    "How you doin'? — Joey, Friends",
+    "That's what she said. — Michael Scott, The Office",
+    "This is the way. — The Mandalorian",
 )
 
 _LOADING_PHRASES = (
