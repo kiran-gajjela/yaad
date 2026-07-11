@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yaad — local-first memory search for WhatsApp</title>
+<meta name="description" content="yaad turns a WhatsApp export into grounded, cited answers: hybrid retrieval for what was said, guarded text-to-SQL for what the numbers say, and a local model that never sends your chat anywhere.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%B5%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #F4F6F8;
+    --surface: #FFFFFF;
+    --surface-2: #ECEFF3;
+    --text: #171B21;
+    --text-dim: #5B6472;
+    --line: rgba(23,27,33,0.11);
+    --accent: #2453C4;
+    --accent-soft: rgba(36,83,196,0.09);
+    --accent-2: #9A4E24;
+    --accent-2-soft: rgba(154,78,36,0.10);
+    --good: #1E7A4C;
+    --good-soft: rgba(30,122,76,0.10);
+    --shadow: 0 1px 2px rgba(23,27,33,0.05), 0 8px 24px -12px rgba(23,27,33,0.12);
+
+    --font-sans: ui-sans-serif, "Segoe UI", "SF Pro Text", -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151C;
+      --surface: #161C25;
+      --surface-2: #1E2530;
+      --text: #EDF0F4;
+      --text-dim: #96A1B0;
+      --line: rgba(237,240,244,0.10);
+      --accent: #6FA0FF;
+      --accent-soft: rgba(111,160,255,0.14);
+      --accent-2: #D98A5C;
+      --accent-2-soft: rgba(217,138,92,0.13);
+      --good: #59C793;
+      --good-soft: rgba(89,199,147,0.13);
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -14px rgba(0,0,0,0.55);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  code { font-family: var(--font-mono); }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  section:first-of-type { border-top: none; }
+  h2 {
+    font-size: clamp(22px, 2.6vw, 28px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  .section-lede { color: var(--text-dim); max-width: 68ch; font-size: 16px; margin: 0 0 36px; }
+
+  /* ---------------------------------------------------------------- hero */
+  .hero { padding: 44px 0 48px; border-top: none; }
+  .hero h1 {
+    font-size: clamp(28px, 3.6vw, 38px);
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .hero .sub { font-size: clamp(15.5px, 1.6vw, 17px); color: var(--text-dim); max-width: 56ch; margin: 0 0 28px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    font-weight: 600;
+    padding: 11px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--line); }
+  .url-fallback {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin: 12px 0 0;
+    user-select: all;
+  }
+
+  /* ------------------------------------------------------------- metrics */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .metric { background: var(--surface); padding: 22px 18px; }
+  .metric .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(24px, 3vw, 30px);
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+  }
+  .metric .lbl { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; display: block; line-height: 1.4; }
+
+  /* --------------------------------------------------------------- story */
+  .story-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 32px 36px;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 32px;
+  }
+  @media (max-width: 760px) { .story-card { grid-template-columns: 1fr; } }
+  .story-card p { font-size: 16px; margin: 0 0 14px; }
+  .story-card p:last-child { margin-bottom: 0; }
+  .cast { margin: 0; padding: 0; list-style: none; }
+  .cast li {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  .cast li:last-child { border-bottom: none; }
+  .cast .name { font-weight: 600; }
+  .cast .role { color: var(--text-dim); text-align: right; }
+
+  /* --------------------------------------------------------------- cards */
+  .cap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+  }
+  .cap-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cap-card .tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    width: fit-content;
+  }
+  .cap-card h3 { font-size: 16.5px; margin: 0; }
+  .cap-card .q {
+    font-size: 13.5px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .cap-card .a { font-size: 14.5px; margin: 0; }
+  .cap-card .note { font-size: 12.5px; color: var(--text-dim); border-top: 1px solid var(--line); padding-top: 10px; margin-top: auto; }
+
+  /* ---------------------------------------------------------- diagram -- */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .node {
+    width: 100%;
+    max-width: 460px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 16px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .node .badge {
+    flex: none;
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .node .badge svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 1.8; }
+  .node .body { flex: 1; min-width: 0; }
+  .node .title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .node .title { font-weight: 700; font-size: 14.5px; }
+  .node .desc { font-size: 13px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+  .pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 20px;
+  }
+  .pill-local { color: var(--good); background: var(--good-soft); }
+  .pill-cloud { color: var(--accent-2); background: var(--accent-2-soft); }
+
+  .connector { display: flex; flex-direction: column; align-items: center; padding: 6px 0; }
+  .connector svg { width: 14px; height: 26px; stroke: var(--text-dim); fill: none; stroke-width: 1.6; }
+
+  .fork-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 6px 0 12px;
+  }
+  .fork {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 780px;
+    border-top: 1.5px solid var(--line);
+    padding-top: 16px;
+    margin-top: 4px;
+  }
+  @media (max-width: 700px) { .fork { grid-template-columns: 1fr; } }
+  .fork .node { max-width: none; }
+  .join-note {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+    margin: 10px 0 0;
+  }
+
+  /* --------------------------------------------------------------- table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; background: var(--surface); }
+  th, td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); background: var(--surface-2); }
+  tbody th { font-weight: 600; white-space: nowrap; }
+  td.yes { color: var(--good); font-weight: 600; }
+  td.hero-col { background: var(--accent-soft); }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom: none; }
+
+  /* ------------------------------------------------------------ roadmap */
+  .roadmap { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .roadmap li {
+    display: flex; gap: 12px; align-items: baseline;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 16px; font-size: 14.5px;
+  }
+  .roadmap .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; margin-top: 7px; }
+
+  footer {
+    padding: 32px 0 56px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    font-size: 13px; color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">local-first RAG · WhatsApp memory search</p>
+    <h1>Your group chats, instantly searchable — without leaving your machine.</h1>
+    <p class="sub">yaad turns a WhatsApp export into grounded, cited answers: hybrid retrieval for what was said, guarded text-to-SQL for what the numbers say, and a local model that never sends your chat anywhere.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      <a class="btn btn-secondary" href="#architecture">See the architecture</a>
+    </div>
+  </header>
+
+  <section aria-label="key metrics">
+    <div class="metrics">
+      <div class="metric"><span class="num">1</span><span class="lbl">SQLite file per chat, nothing else to run</span></div>
+      <div class="metric"><span class="num">0</span><span class="lbl">cloud calls by default</span></div>
+      <div class="metric"><span class="num">2–4B</span><span class="lbl">parameter local model class</span></div>
+      <div class="metric"><span class="num">384</span><span class="lbl">dim embedding vector</span></div>
+      <div class="metric"><span class="num">31/31</span><span class="lbl">unit tests passing</span></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">summary</p>
+    <h2>A router decides how to answer, not the model's best guess</h2>
+    <p class="section-lede">Chat data breaks naive RAG two ways: single messages are useless retrieval units, and half the interesting questions are aggregations no embedding can answer. yaad classifies every question first — search, analytics, or both — then runs hybrid retrieval or guarded SQL accordingly, and synthesizes a grounded, cited answer from whichever local model you point it at.</p>
+  </section>
+
+  <section id="story">
+    <p class="eyebrow">case study</p>
+    <h2>Six friends, 1,800km, one WhatsApp group</h2>
+    <p class="section-lede">Everything below is real model output against a real-shaped export — no cherry-picked transcripts, no edited answers.</p>
+    <div class="story-card">
+      <div>
+        <p>A group of six planning a Manali–Leh–Srinagar motorcycle loop over three months of scattered chat: route debates, a permit rule that nearly cancelled Pangong Tso a month before departure, a teammate's ACL tear two weeks after that crisis was resolved, a replacement rider who joined mid-plan, and a running joke about a weather app that refuses to predict five months out.</p>
+        <p>84 messages. Six people. The kind of chat that sits buried in everyone's phone, half-remembered. yaad turned three months of it into instant, cited answers — read live, on camera, below.</p>
+      </div>
+      <ul class="cast">
+        <li><span class="name">Rahul</span><span class="role">organizer, most active</span></li>
+        <li><span class="name">Vikram</span><span class="role">route lead, solved the permit crisis</span></li>
+        <li><span class="name">Meghna</span><span class="role">budget-conscious, went quiet for 3 weeks</span></li>
+        <li><span class="name">Ananya</span><span class="role">wants a homestay, not a hotel</span></li>
+        <li><span class="name">Karan</span><span class="role">dropped out — torn ACL</span></li>
+        <li><span class="name">Farah</span><span class="role">joined mid-trip as his replacement</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-label="validated capabilities">
+    <p class="eyebrow">verified live</p>
+    <h2>Five capabilities, five real questions</h2>
+    <p class="section-lede">Each card below is one actual exchange with the Ladakh group's export, run against the local <code>gemma4:e4b</code> model. Nothing here is paraphrased for effect.</p>
+    <div class="cap-grid">
+
+      <div class="cap-card">
+        <span class="tag">semantic retrieval</span>
+        <h3>Finds meaning, not just keywords</h3>
+        <p class="q">"what happened with that permit problem back in april?"</p>
+        <p class="a">Correctly narrated the full Inner Line Permit crisis — the new sponsor-agent rule, the panic, Vikram sourcing a local operator, the ₹500/person resolution — despite the chat never using the word "problem" anywhere.</p>
+        <p class="note">BM25 ⊕ dense embeddings, fused with Reciprocal Rank Fusion</p>
+      </div>
+
+      <div class="cap-card">
+        <span class="tag">multi-hop reasoning</span>
+        <h3>Connects two separate facts</h3>
+        <p class="q">"why did karan drop out, and who replaced him?"</p>
+        <p class="a">"Karan dropped out because he tore his ACL playing football... Farah replaced Karan's slot for the trip." Two unrelated messages, six weeks apart, correctly linked into one answer.</p>
+        <p class="note">Single retrieval pass, not an agentic multi-step loop</p>
+      </div>
+
+      <div class="cap-card">
+        <span class="tag">grounded honesty</span>
+        <h3>Reports disagreement, doesn't resolve it for you</h3>
+        <p class="q">"where are they staying the last night in Leh?"</p>
+        <p class="a">Correctly presented all three live positions — homestay, hotel, decide-later — because the group genuinely never settled it. No invented resolution.</p>
+        <p class="note">System prompt requires per-claim (sender, date) citation</p>
+      </div>
+
+      <div class="cap-card">
+        <span class="tag">structured analytics</span>
+        <h3>Exact numbers, not estimates</h3>
+        <p class="q">"who is the most active person in this group?"</p>
+        <p class="a">"Rahul is the most active person with 24 messages" — a real <code>COUNT(*) GROUP BY sender</code> query the model wrote itself against a documented schema, not a guess from reading excerpts.</p>
+        <p class="note">Read-only connection, row-capped, one retry on error</p>
+      </div>
+
+      <div class="cap-card">
+        <span class="tag">temporal reasoning</span>
+        <h3>"Last week" means the real last week</h3>
+        <p class="q">"tldr, summarize last week"</p>
+        <p class="a">Resolved the date range from the system clock, not model guesswork, then pulled <em>every</em> matching message chronologically — a Sanjay return, a vendor confirmation, a poll — instead of a similarity-ranked sample that could miss half of it.</p>
+        <p class="note">Deterministic date parsing; exhaustive retrieval for bounded ranges</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="architecture">
+    <p class="eyebrow">architecture</p>
+    <h2>Export in, cited answer out</h2>
+    <p class="section-lede">Every stage below runs on-device by default. Nothing leaves the machine unless you explicitly opt into a cloud model.</p>
+
+    <div class="flow">
+
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v6h6"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">WhatsApp export (.txt)</span></div>
+        <div class="desc">Exported by hand from the phone — no API, no account linking, no scraping.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h6"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Parser</span><span class="pill pill-local">local</span></div>
+        <div class="desc">Android + iOS formats, DD/MM auto-inference, system-message detection kept out of the sender field.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Sessionizer</span></div>
+        <div class="desc">New session after a 45-minute gap — separates unrelated bursts of chat.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="4"/><rect x="4" y="11" width="16" height="4"/><rect x="4" y="17" width="10" height="4"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Chunker</span></div>
+        <div class="desc">25-message sliding window, 5-message overlap — sized in messages, not tokens.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="fork-label">indexed two ways, in one file</div>
+      <div class="fork">
+        <div class="node">
+          <span class="badge"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg></span>
+          <div class="body"><div class="title-row"><span class="title">SQLite FTS5</span></div>
+          <div class="desc">BM25 lexical search — names and places are strong anchors in chat.</div></div>
+        </div>
+        <div class="node">
+          <span class="badge"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6 9l6 7M18 9l-6 7"/></svg></span>
+          <div class="body"><div class="title-row"><span class="title">Dense vectors</span></div>
+          <div class="desc">all-MiniLM-L6-v2, 384-dim, brute-force cosine — instant at personal-chat scale.</div></div>
+        </div>
+      </div>
+      <p class="join-note">no separate vector database — both indexes live in the same .db file</p>
+
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M4 12h5M15 12h5"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Router</span><span class="pill pill-local">local LLM</span></div>
+        <div class="desc">Classifies intent — search / analytics / both — with a keyword-heuristic fallback if the LLM call fails.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="fork-label">question intent splits the path</div>
+      <div class="fork">
+        <div class="node">
+          <span class="badge"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg></span>
+          <div class="body"><div class="title-row"><span class="title">Hybrid retrieval</span></div>
+          <div class="desc">BM25 ⊕ dense, fused via RRF. Bounded date ranges pull everything, not a ranked sample.</div></div>
+        </div>
+        <div class="node">
+          <span class="badge"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span>
+          <div class="body"><div class="title-row"><span class="title">Guarded text-to-SQL</span></div>
+          <div class="desc">One read-only statement, row-capped, one auto-retry — against a documented schema only.</div></div>
+        </div>
+      </div>
+
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+      <div class="node">
+        <span class="badge"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 10-10-3-3L5 16l-1 4z"/><path d="M14 6l3 3"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Synthesis</span><span class="pill pill-local">gemma4:e4b</span><span class="pill pill-cloud">cloud optional</span></div>
+        <div class="desc">Grounds every claim, cites (sender, date), and says "not mentioned" instead of inventing.</div></div>
+      </div>
+      <div class="connector"><svg viewBox="0 0 14 26"><path d="M7 0v20M1 15l6 8 6-8"/></svg></div>
+
+      <div class="node" style="border-color:var(--accent);">
+        <span class="badge"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.4 8.4H4l2.4-3.6A8.4 8.4 0 1 1 21 11.5z"/></svg></span>
+        <div class="body"><div class="title-row"><span class="title">Answer, on your screen</span></div>
+        <div class="desc">Cited and private by construction — nothing left the machine to produce it.</div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">why not the alternatives</p>
+    <h2>What generic approaches specifically can't do</h2>
+    <p class="section-lede">Not a knock on the alternatives — they solve broader problems. This is what's specifically true of pasting a chat into a general chatbot, a generic RAG pipeline, or a platform's built-in assistant.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>capability</th><th class="hero-col">yaad</th><th>paste into a chatbot</th><th>generic RAG framework</th><th>platform assistant</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>chunking fits chat</th><td class="yes hero-col">session + sliding window</td><td>none — whole thread, one blob</td><td>fixed token windows, breaks turns</td><td>not user-controllable</td></tr>
+          <tr><th>answers aggregations</th><td class="yes hero-col">guarded text-to-SQL</td><td>guesses from visible text</td><td>embeddings can't count</td><td>rarely exposed</td></tr>
+          <tr><th>private by default</th><td class="yes hero-col">local model, local storage</td><td>chat sent to a cloud provider</td><td>depends on hosting</td><td>data stays on their servers</td></tr>
+          <tr><th>infra to operate</th><td class="yes hero-col">one file, one CLI</td><td>none</td><td>vector DB + pipeline + servers</td><td>a whole platform</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">what's next</p>
+    <h2>Roadmap</h2>
+    <ul class="roadmap">
+      <li><span class="dot"></span>LLM session summaries as an additional retrieval layer</li>
+      <li><span class="dot"></span>Multi-chat databases with cross-chat questions</li>
+      <li><span class="dot"></span>Temporal knowledge graph over entities/events</li>
+      <li><span class="dot"></span>Multimodal input (images) via vision-capable local models</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>yaad — local-first RAG + analytics over WhatsApp exports</span>
+    <span><a href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">github.com/kiran-gajjela/yaad</a> · MIT licensed</span>
+  </footer>
+
+</div>
+</body>
+</html>
