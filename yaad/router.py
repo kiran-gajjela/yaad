@@ -7,9 +7,11 @@ keyword heuristic as fallback so the tool degrades gracefully.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import re
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 from .llm import BaseLLM
 
@@ -42,9 +44,16 @@ Return ONLY a JSON object, no prose, with keys:
   analytics_question: restated stats question (or null)
 
 "search" = answered by reading messages (what/who said something, plans, decisions).
-"analytics" = needs counting/aggregation (how many, most active, averages, trends).
+"analytics" = needs counting/aggregation over STRUCTURED data already in the schema
+(message counts, active senders, reply times, dates) - never a number that only exists
+as free text someone typed (a budget, a price, a quote). "What's the total budget" or
+"how much did X cost" are "search" even though they sound numeric, because that figure
+lives inside a message's text, not a column - SQL can't extract it, only reading can.
 "both" = needs stats AND message content.
-Only set sender when the question filters BY author, not when a person is merely the topic.
+Only set sender when the question filters BY author, not when a person is merely the
+topic - e.g. "what did X say/talk about", "summarize X's messages", "X's activity"
+-> set sender to X. But "who talked about X", "what happened to X", "news about X"
+-> X is the topic, leave sender null.
 Resolve relative dates ("last month", "before the trip") using the dates provided."""
 
 
@@ -64,16 +73,62 @@ def _heuristic(question: str) -> Route:
     return Route(intent="search", search_query=question)
 
 
-def route_query(
-    question: str,
-    llm: BaseLLM | None = None,
-    participants: tuple[str, ...] = (),
-    date_range: tuple[str, str] | None = None,
-    today: str | None = None,
-) -> Route:
-    if llm is None:
-        return _heuristic(question)
+def _add_months(d: date, months: int) -> date:
+    month_index = d.month - 1 + months
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
 
+
+# Relative-date phrases resolved from Python's real clock rather than LLM
+# arithmetic. Even given "today" as text context, small local models get
+# this wrong surprisingly often (llama3.2:3b resolved "this week" and "last
+# 7 days" to the entire chat's date range in testing); a regex match here is
+# unambiguous and always correct, so it overrides whatever the LLM guessed.
+_REL_N_PATTERNS: tuple[tuple[re.Pattern, object], ...] = (
+    (re.compile(r"\b(?:last|past)\s+(\d+)\s+days?\b", re.I),
+     lambda t, n: (t - timedelta(days=n), t)),
+    (re.compile(r"\b(?:last|past)\s+(\d+)\s+weeks?\b", re.I),
+     lambda t, n: (t - timedelta(weeks=n), t)),
+    (re.compile(r"\b(?:last|past)\s+(\d+)\s+months?\b", re.I),
+     lambda t, n: (_add_months(t, -n), t)),
+)
+
+_REL_PATTERNS: tuple[tuple[re.Pattern, object], ...] = (
+    (re.compile(r"\btoday\b", re.I), lambda t: (t, t)),
+    (re.compile(r"\byesterday\b", re.I), lambda t: (t - timedelta(days=1),) * 2),
+    (re.compile(r"\bthis week\b", re.I), lambda t: (t - timedelta(days=t.weekday()), t)),
+    (re.compile(r"\blast week\b", re.I), lambda t: (
+        t - timedelta(days=t.weekday() + 7), t - timedelta(days=t.weekday() + 1)
+    )),
+    (re.compile(r"\bthis month\b", re.I), lambda t: (t.replace(day=1), t)),
+    (re.compile(r"\blast month\b", re.I), lambda t: (
+        _add_months(t.replace(day=1), -1), t.replace(day=1) - timedelta(days=1)
+    )),
+)
+
+
+def _resolve_relative_dates(question: str, today: date) -> tuple[str | None, str | None]:
+    for pattern, fn in _REL_N_PATTERNS:
+        m = pattern.search(question)
+        if m:
+            d_from, d_to = fn(today, int(m.group(1)))
+            return d_from.isoformat(), d_to.isoformat()
+    for pattern, fn in _REL_PATTERNS:
+        if pattern.search(question):
+            d_from, d_to = fn(today)
+            return d_from.isoformat(), d_to.isoformat()
+    return None, None
+
+
+def _route_via_llm(
+    question: str,
+    llm: BaseLLM,
+    participants: tuple[str, ...],
+    date_range: tuple[str, str] | None,
+    today: str | None,
+) -> Route:
     ctx = []
     if participants:
         ctx.append("Chat participants: " + ", ".join(participants))
@@ -108,3 +163,26 @@ def route_query(
         )
     except Exception:
         return _heuristic(question)
+
+
+def route_query(
+    question: str,
+    llm: BaseLLM | None = None,
+    participants: tuple[str, ...] = (),
+    date_range: tuple[str, str] | None = None,
+    today: str | None = None,
+) -> Route:
+    route = (
+        _route_via_llm(question, llm, participants, date_range, today)
+        if llm is not None
+        else _heuristic(question)
+    )
+
+    today_date = date.fromisoformat(today) if today else date.today()
+    det_from, det_to = _resolve_relative_dates(question, today_date)
+    if det_from:
+        route.date_from = det_from
+    if det_to:
+        route.date_to = det_to
+
+    return route

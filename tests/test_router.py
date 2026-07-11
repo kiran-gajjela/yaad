@@ -1,6 +1,8 @@
+from datetime import date
+
 import pytest
 
-from yaad.router import Route, _extract_json, _heuristic, route_query
+from yaad.router import Route, _extract_json, _heuristic, _resolve_relative_dates, route_query
 
 
 def test_heuristic_analytics():
@@ -46,3 +48,51 @@ def test_route_falls_back_on_garbage():
     llm = FakeLLM("total nonsense, no json here")
     r = route_query("how many messages total", llm=llm)
     assert r.intent == "analytics"  # heuristic fallback
+
+
+# Saturday, so weekday() == 5 - exercises non-trivial week-boundary math.
+TODAY = date(2026, 7, 11)
+
+
+def test_resolve_this_week():
+    d_from, d_to = _resolve_relative_dates("summarize this week", TODAY)
+    assert d_from == "2026-07-06"  # Monday
+    assert d_to == "2026-07-11"
+
+
+def test_resolve_last_n_days():
+    d_from, d_to = _resolve_relative_dates("what happened in the last 7 days", TODAY)
+    assert d_from == "2026-07-04"
+    assert d_to == "2026-07-11"
+
+
+def test_resolve_last_month():
+    d_from, d_to = _resolve_relative_dates("summarize last month", TODAY)
+    assert d_from == "2026-06-01"
+    assert d_to == "2026-06-30"
+
+
+def test_resolve_last_n_months_crosses_year():
+    d_from, d_to = _resolve_relative_dates("last 8 months", TODAY)
+    assert d_from == "2025-11-11"
+    assert d_to == "2026-07-11"
+
+
+def test_resolve_no_match_returns_none():
+    assert _resolve_relative_dates("what did priya say about the villa", TODAY) == (None, None)
+
+
+def test_route_query_overrides_llm_date_with_deterministic_one():
+    # LLM guesses a wrong/lazy date range; the deterministic parser must win
+    # because "this week" is an unambiguous, regex-matchable phrase.
+    llm = FakeLLM('{"intent": "search", "search_query": "x", "date_from": "2020-01-01", "date_to": "2020-01-01"}')
+    r = route_query("summarize this week", llm=llm, today="2026-07-11")
+    assert r.date_from == "2026-07-06"
+    assert r.date_to == "2026-07-11"
+
+
+def test_route_query_leaves_unmatched_dates_to_llm():
+    llm = FakeLLM('{"intent": "search", "search_query": "x", "date_from": "2025-11-02", "date_to": "2025-11-02"}')
+    r = route_query("what did we decide before the trip", llm=llm, today="2026-07-11")
+    assert r.date_from == "2025-11-02"
+    assert r.date_to == "2025-11-02"
