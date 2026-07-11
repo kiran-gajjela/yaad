@@ -6,9 +6,11 @@ import random
 import sys
 import threading
 
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from . import __version__
 from .analytics import hourly, monthly, overview, reply_time_stats, sender_stats, top_emojis
@@ -25,53 +27,141 @@ for _stream in (sys.stdout, sys.stderr):
 
 console = Console()
 
-_THINKING_PHRASES = (
+_QUOTES = (
+    # thinking / searching energy
+    "42. — Deep Thought, The Hitchhiker's Guide to the Galaxy",
+    "Don't Panic. — The Hitchhiker's Guide to the Galaxy",
+    "Elementary, my dear Watson. — Sherlock Holmes",
+    "I drink and I know things. — Tyrion Lannister, Game of Thrones",
+    "Legen — wait for it — dary! — Barney Stinson, HIMYM",
+    "Just keep swimming. — Dory, Finding Nemo",
+    "Follow the white rabbit. — The Matrix",
+    "I know kung fu. — Neo, The Matrix",
+    "Wax on, wax off. — Mr. Miyagi, The Karate Kid",
+    "Never tell me the odds. — Han Solo, Star Wars",
+    "Do or do not. There is no try. — Yoda, Star Wars",
+    "Make it so. — Captain Picard, Star Trek",
+    "Great Scott! — Doc Brown, Back to the Future",
+    "I solemnly swear I am up to no good. — Harry Potter",
+    "It's super effective! — Pokémon",
+
+    # certified classics
     "Love me. — Homelander, The Boys",
-    "Valar Morghulis. — Braavos, Game of Thrones",
-    "Valar Dohaeris. — A man with no face",
     "I am the one who knocks. — Walter White, Breaking Bad",
     "Say my name. — Walter White, Breaking Bad",
+    "Yeah, science! — Jesse Pinkman, Breaking Bad",
+    "Better call Saul! — Saul Goodman",
     "Winter is coming. — House Stark, Game of Thrones",
     "Not today. — Arya Stark, Game of Thrones",
-    "Bazinga! — Sheldon Cooper, The Big Bang Theory",
-    "How you doin'? — Joey, Friends",
-    "That's what she said. — Michael Scott, The Office",
+    "Valar Morghulis. — Braavos, Game of Thrones",
+    "Valar Dohaeris. — A man with no face",
+    "Dracarys. — Daenerys Targaryen, Game of Thrones",
+    "Chaos is a ladder. — Littlefinger, Game of Thrones",
     "This is the way. — The Mandalorian",
+    "I'll be back. — The Terminator",
+    "Why so serious? — The Joker, The Dark Knight",
+    "I'm Batman. — Batman",
+    "I am inevitable. — Thanos, Avengers: Endgame",
+    "I am Iron Man. — Tony Stark, Avengers: Endgame",
+    "I can do this all day. — Captain America",
+    "I am Groot. — Groot, Guardians of the Galaxy",
+    "May the Force be with you. — Star Wars",
+    "Hello there. — Obi-Wan Kenobi",
+    "To infinity and beyond! — Buzz Lightyear, Toy Story",
+    "Hakuna Matata. — The Lion King",
+    "You shall not pass! — Gandalf, The Lord of the Rings",
+    "My precious. — Gollum, The Lord of the Rings",
+    "One does not simply walk into Mordor. — Boromir, LOTR",
+    "Fear is the mind-killer. — Dune",
+    "The spice must flow. — Dune",
+
+    # sitcom corner
+    "How you doin'? — Joey, Friends",
+    "We were on a break! — Ross, Friends",
+    "PIVOT! — Ross, Friends",
+    "That's what she said. — Michael Scott, The Office",
+    "Bears. Beets. Battlestar Galactica. — Jim Halpert, The Office",
+    "Identity theft is not a joke, Jim! — Dwight Schrute, The Office",
+    "Bazinga! — Sheldon Cooper, The Big Bang Theory",
+    "Wubba lubba dub dub! — Rick Sanchez, Rick and Morty",
+    "D'oh! — Homer Simpson, The Simpsons",
+
+    # anime + games
+    "It's over 9000! — Vegeta, Dragon Ball Z",
+    "Believe it! — Naruto",
+    "Plus Ultra! — My Hero Academia",
+    "Omae wa mou shindeiru. — Fist of the North Star",
+    "The cake is a lie. — Portal",
+    "It's dangerous to go alone! Take this. — The Legend of Zelda",
+    "FUS RO DAH! — Skyrim",
+    "Gotta catch 'em all! — Pokémon",
+
+    # Bollywood
+    "Kitne aadmi the? — Gabbar Singh, Sholay",
+    "Mogambo khush hua. — Mr. India",
+    "Picture abhi baaki hai, mere dost. — Om Shanti Om",
+    "Don ko pakadna mushkil hi nahi, namumkin hai. — Don",
+    "How's the josh? — Uri",
+    "Jhukega nahi! — Pushpa",
 )
 
-_LOADING_PHRASES = (
-    "loading your model for the first time, this may take a moment...",
-    "grab a cup of coffee ☕...",
-    "setting things up...",
-    "almost ready...",
-)
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_DOTS = (".", "..", "...")
 
 
-def _run_with_spinner(fn, *fn_args, _phrases=_THINKING_PHRASES, _shuffle=True, **fn_kwargs):
-    """Run a slow, blocking call with a rich spinner that cycles fun status
-    text. `fn` itself runs on the current thread as normal - sqlite3
-    connections are bound to their creating thread, so the real work can't
-    move to a worker thread. Only the cosmetic text-cycling runs on a
-    background thread, ticking on a timer independent of the call below."""
-    phrases = list(_phrases)
-    if _shuffle:
-        random.shuffle(phrases)
+def _run_with_live(fn, *fn_args, render, tick: float = 0.4, **fn_kwargs):
+    """Run a blocking call under a two-line rich Live display, redrawing via
+    `render(i)` every `tick` seconds. `fn` runs on the current thread as
+    normal - sqlite3 connections are bound to their creating thread, so the
+    real work can't move to a worker thread. Only the cosmetic redraw runs
+    on a background thread, ticking on a timer independent of the call."""
     stop = threading.Event()
+    with Live(render(0), console=console, refresh_per_second=12, transient=True) as live:
+        def tick_loop():
+            i = 1
+            while not stop.wait(timeout=tick):
+                live.update(render(i))
+                i += 1
 
-    def cycle_text(status):
-        i = 1
-        while not stop.wait(timeout=2.5):
-            status.update(f"[bold cyan]{phrases[i % len(phrases)]}[/]")
-            i += 1
-
-    with console.status(f"[bold cyan]{phrases[0]}[/]", spinner="dots") as status:
-        updater = threading.Thread(target=cycle_text, args=(status,), daemon=True)
+        updater = threading.Thread(target=tick_loop, daemon=True)
         updater.start()
         try:
             return fn(*fn_args, **fn_kwargs)
         finally:
             stop.set()
             updater.join(timeout=1)
+
+
+def _run_with_loading_spinner(fn, *fn_args, **fn_kwargs):
+    """First-time model load: animated dots on line one, a rotating quote
+    with a bulb on line two."""
+    quotes = list(_QUOTES)
+    random.shuffle(quotes)
+
+    def render(i: int):
+        spin = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
+        dots = _DOTS[i % len(_DOTS)]
+        line1 = Text.from_markup(f"[bold cyan]{spin} loading the model{dots}[/]")
+        line2 = Text.from_markup(f"💡 [dim]{quotes[(i // 6) % len(quotes)]}[/]")
+        return Group(line1, line2)
+
+    return _run_with_live(fn, *fn_args, render=render, **fn_kwargs)
+
+
+def _run_with_thinking_spinner(fn, *fn_args, **fn_kwargs):
+    """Answer generation: a fixed joke on line one, a rotating quote below."""
+    quotes = list(_QUOTES)
+    random.shuffle(quotes)
+
+    def render(i: int):
+        spin = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
+        line1 = Text.from_markup(
+            f"[bold cyan]{spin} generating the response... until then, go touch grass 🌱[/]"
+        )
+        line2 = Text.from_markup(f"[dim]{quotes[(i // 6) % len(quotes)]}[/]")
+        return Group(line1, line2)
+
+    return _run_with_live(fn, *fn_args, render=render, **fn_kwargs)
 
 
 def _bar(value: float, max_value: float, width: int = 28) -> str:
@@ -127,10 +217,7 @@ def cmd_chat(args) -> int:
         console.print(f"[red]{e}[/]")
         return 1
 
-    engine = _run_with_spinner(
-        Engine, args.db, llm=llm, dense=not args.no_dense,
-        _phrases=_LOADING_PHRASES, _shuffle=False,
-    )
+    engine = _run_with_loading_spinner(Engine, args.db, llm=llm, dense=not args.no_dense)
     mode = "hybrid (fts + dense)" if engine.dense else "fts-only"
     console.print(
         Panel.fit(
@@ -153,7 +240,7 @@ def cmd_chat(args) -> int:
         if q.lower() in ("/quit", "/exit", "quit", "exit"):
             break
         try:
-            ans = _run_with_spinner(engine.answer, q)
+            ans = _run_with_thinking_spinner(engine.answer, q)
         except LLMError as e:
             console.print(f"[red]{e}[/]")
             continue
@@ -289,7 +376,7 @@ def cmd_surprise(args) -> int:
     con = connect(args.db, readonly=True)
     console.print(f"[dim]asking {llm.name}/{llm.model}...[/]")
     try:
-        text = _run_with_spinner(generate_surprise, con, llm)
+        text = _run_with_thinking_spinner(generate_surprise, con, llm)
     except LLMError as e:
         console.print(f"[red]{e}[/]")
         return 1
