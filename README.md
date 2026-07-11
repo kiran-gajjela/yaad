@@ -119,6 +119,7 @@ yaad/
 - [ ] Multi-chat databases with cross-chat questions
 - [ ] Temporal knowledge graph over entities/events (who-what-when across months)
 - [ ] Small eval set for retrieval quality
+- [ ] Multimodal input (images) via vision-capable local models (e.g. Gemma 4) - v2
 
 ## Dev
 
