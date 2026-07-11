@@ -84,7 +84,7 @@ On your **phone**, open the specific chat or group you want to ask questions abo
 
 Choose **Without Media** — smaller file, faster, and yaad only reads the text anyway.
 
-> ⚠️ **If "Advanced Chat Privacy" is turned on for that chat, you can't export it at all.** WhatsApp disables the Export Chat option entirely while it's active — this is a real, documented WhatsApp behavior, not a yaad limitation. Any admin can turn it off first: open the chat → tap the chat name → **Advanced Chat Privacy** → toggle off. Then export.
+> ⚠️ If "Advanced Chat Privacy" is turned on for that chat, you can't export it. Any admin can turn it off: open the chat → tap the chat name → **Advanced Chat Privacy** → toggle off.
 
 Get the exported `.txt` off your phone and onto the computer running yaad — email it to yourself, save it via Drive/iCloud, AirDrop, cable, whatever's easiest.
 
