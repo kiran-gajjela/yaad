@@ -35,15 +35,23 @@ _THINKING_PHRASES = (
     "almost there...",
 )
 
+_LOADING_PHRASES = (
+    "loading your model for the first time, this may take a moment...",
+    "grab a cup of coffee ☕...",
+    "setting things up...",
+    "almost ready...",
+)
 
-def _run_with_spinner(fn, *fn_args, **fn_kwargs):
+
+def _run_with_spinner(fn, *fn_args, _phrases=_THINKING_PHRASES, _shuffle=True, **fn_kwargs):
     """Run a slow, blocking call with a rich spinner that cycles fun status
     text. `fn` itself runs on the current thread as normal - sqlite3
     connections are bound to their creating thread, so the real work can't
     move to a worker thread. Only the cosmetic text-cycling runs on a
     background thread, ticking on a timer independent of the call below."""
-    phrases = list(_THINKING_PHRASES)
-    random.shuffle(phrases)
+    phrases = list(_phrases)
+    if _shuffle:
+        random.shuffle(phrases)
     stop = threading.Event()
 
     def cycle_text(status):
@@ -115,7 +123,10 @@ def cmd_chat(args) -> int:
         console.print(f"[red]{e}[/]")
         return 1
 
-    engine = Engine(args.db, llm=llm, dense=not args.no_dense)
+    engine = _run_with_spinner(
+        Engine, args.db, llm=llm, dense=not args.no_dense,
+        _phrases=_LOADING_PHRASES, _shuffle=False,
+    )
     mode = "hybrid (fts + dense)" if engine.dense else "fts-only"
     console.print(
         Panel.fit(

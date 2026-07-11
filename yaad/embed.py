@@ -22,6 +22,31 @@ def _load_model(name: str):
         raise RuntimeError(
             "dense retrieval needs the extra: pip install 'yaad[dense]'"
         ) from e
+
+    # huggingface_hub logs an "unauthenticated requests" warning, and
+    # transformers draws its own "Loading weights" tqdm bar - both are noise
+    # here (a public model needs no token) and the bar fights with any
+    # spinner/status display the caller is showing. transformers caches
+    # whether progress bars are enabled in a module-level flag *at import
+    # time*, so disabling it on huggingface_hub alone is too late once
+    # transformers has already been imported - disable_progress_bar() below
+    # resets that cached flag directly instead.
+    import logging
+
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    try:
+        from huggingface_hub.utils import disable_progress_bars
+
+        disable_progress_bars()
+    except ImportError:  # pragma: no cover
+        pass
+    try:
+        from transformers.utils.logging import disable_progress_bar
+
+        disable_progress_bar()
+    except ImportError:  # pragma: no cover
+        pass
+
     return SentenceTransformer(name)
 
 
