@@ -90,7 +90,7 @@ Get the exported `.txt` off your phone and onto the computer running yaad — em
 
 ### 5. Put the export where yaad can see it
 
-Create an `exports/` folder at the root of this repo (it's already in `.gitignore`, so a chat full of other people's messages never accidentally gets committed) and drop the file in:
+Create an `exports/` folder at the root of this repo and drop the file in:
 
 ```bash
 mkdir -p exports
