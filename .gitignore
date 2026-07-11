@@ -1,0 +1,18 @@
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# your actual chats never belong in git
+*.db
+*.db-wal
+*.db-shm
+exports/
+
+# os
+.DS_Store
