@@ -56,3 +56,19 @@ def test_colon_in_message_body():
     msgs = parse_lines(["04/10/25, 22:42 - Rohan: check this: https://x.com"])
     assert msgs[0].sender == "Rohan"
     assert msgs[0].text == "check this: https://x.com"
+
+
+def test_community_join_notice_is_system_not_sender():
+    # WhatsApp Communities system messages contain ": " as ordinary
+    # phrasing ("...in the community: <name>"), which can be misread as
+    # a sender delimiter. Must stay a system message, not a fake sender.
+    line = "12/04/26, 5:29 pm - You joined a group via invite in the community: Some Community"
+    msgs = parse_lines([line])
+    assert msgs[0].sender is None
+    assert msgs[0].is_system
+    assert "joined a group via invite" in msgs[0].text
+
+    # a real "You: ..." message must still parse as a normal sender
+    msgs = parse_lines(["04/10/25, 22:42 - You: on my way"])
+    assert msgs[0].sender == "You"
+    assert msgs[0].text == "on my way"

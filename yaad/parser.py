@@ -42,6 +42,19 @@ _MEDIA_EXACT = {
     "null",
 }
 
+# Some system/service messages contain ": " as part of ordinary English
+# phrasing rather than as a sender delimiter (e.g. WhatsApp Communities:
+# "You joined a group via invite in the community: <name>"). A real
+# contact name never contains these, so treat a match as a signal that
+# the whole line is system narration, not "sender: text".
+_SYSTEM_PHRASES = (
+    "joined", "left the group", "left this group", " added ", " removed ",
+    "changed the subject", "changed this group's icon",
+    "changed the group description", "created group", "created a community",
+    "the community", "end-to-end encrypted", "security code", "turned on",
+    "turned off", "is now an admin", "deleted this group",
+)
+
 
 @dataclass
 class RawMessage:
@@ -134,9 +147,12 @@ def parse_lines(lines: Sequence[str], day_first: bool | None = None) -> list[Raw
             text = rest
             if ": " in rest:
                 cand_sender, cand_text = rest.split(": ", 1)
-                # Real sender names are short; this only misfires on exotic
-                # system messages that happen to contain ": ".
-                if 0 < len(cand_sender) <= 100:
+                # Real sender names are short and don't read like system
+                # narration; this guards against exotic system messages
+                # that happen to contain ": " (e.g. WhatsApp Communities
+                # join notices).
+                looks_like_system = any(p in cand_sender.lower() for p in _SYSTEM_PHRASES)
+                if 0 < len(cand_sender) <= 100 and not looks_like_system:
                     sender, text = cand_sender, cand_text
             messages.append(
                 RawMessage(ts=ts, sender=sender, text=text, is_media=_is_media(text))
