@@ -141,12 +141,15 @@ you › /quit
 
 ## LLM setup
 
-| Provider | Default model | Config |
-|---|---|---|
-| `ollama` (default) | `llama3.2:3b` | `ollama serve` + `ollama pull llama3.2:3b`; host via `OLLAMA_HOST` |
-| `anthropic` | `claude-sonnet-4-6` | `export ANTHROPIC_API_KEY=...` |
+yaad is built for on-device LLMs first — that's the whole point: your chat never leaves your machine. Cloud is there if you specifically want the reasoning quality of a larger model and don't mind the trade-off.
 
-Override with `--model`. Everything else (parsing, indexing, FTS, stats) runs fully offline.
+| Provider | Model | Config |
+|---|---|---|
+| `ollama` (default) | `llama3.2:3b` (default) | `ollama serve` + `ollama pull llama3.2:3b`; host via `OLLAMA_HOST` |
+| `ollama` | `gemma4:e4b` | `ollama pull gemma4:e4b` — noticeably better reasoning than the 3B default, at the cost of speed |
+| `anthropic` | `claude-sonnet-4-6` | `export ANTHROPIC_API_KEY=...` — cloud, for when you want stronger reasoning and accept the trade-off |
+
+Override with `--model` (and `--provider anthropic` for Claude). Everything else (parsing, indexing, FTS, stats) runs fully offline regardless of which LLM you point at it.
 
 ## What the parser survives
 
