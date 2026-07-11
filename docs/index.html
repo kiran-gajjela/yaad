@@ -76,13 +76,29 @@
 
   /* ---------------------------------------------------------------- hero */
   .hero { padding: 44px 0 48px; border-top: none; }
+  .wordmark {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 0 0 22px;
+  }
+  .wordmark .en {
+    font-size: clamp(30px, 4vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.015em;
+  }
+  .wordmark .hi {
+    font-size: clamp(19px, 2.4vw, 24px);
+    color: var(--text-dim);
+    font-weight: 500;
+  }
   .hero h1 {
-    font-size: clamp(28px, 3.6vw, 38px);
+    font-size: clamp(24px, 3.1vw, 33px);
     font-weight: 800;
     letter-spacing: -0.015em;
     margin: 0 0 14px;
     text-wrap: balance;
-    max-width: 20ch;
+    max-width: 34ch;
   }
   .hero .sub { font-size: clamp(15.5px, 1.6vw, 17px); color: var(--text-dim); max-width: 56ch; margin: 0 0 28px; }
   .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -291,8 +307,9 @@
 <div class="wrap">
 
   <header class="hero">
+    <div class="wordmark"><span class="en">yaad</span><span class="hi">याद</span></div>
     <p class="eyebrow">local-first RAG · WhatsApp memory search</p>
-    <h1>Your group chats, instantly searchable — without leaving your machine.</h1>
+    <h1>याद — Hindi for memory. Now it's what your WhatsApp archive has too.</h1>
     <p class="sub">yaad turns a WhatsApp export into grounded, cited answers: hybrid retrieval for what was said, guarded text-to-SQL for what the numbers say, and a local model that never sends your chat anywhere.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
