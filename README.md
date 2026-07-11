@@ -42,9 +42,7 @@ question ──→ router (LLM) ──┬── search ────→ hybrid re
 
 ## Getting started, from scratch
 
-Never used yaad before? Follow this top to bottom — it assumes nothing.
-
-**Want to try it before exporting your own chat?** Skip straight to step 6 with the bundled sample:
+Try the bundled sample chat instead of exporting your own:
 ```bash
 git clone https://github.com/kiran-gajjela/yaad.git && cd yaad
 pip install -e .
