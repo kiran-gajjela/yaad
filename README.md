@@ -40,42 +40,105 @@ question ──→ router (LLM) ──┬── search ────→ hybrid re
 - **Guarded text-to-SQL**: the LLM writes SQLite against a documented schema, executed on a **read-only** connection, single statement, row-capped, with one auto-retry on error.
 - **Grounded answers**: the synthesizer cites senders and dates, and says so when something isn't in the chat.
 
-## Quickstart
+## Getting started, from scratch
 
-**1. Export a chat** (without media): WhatsApp → open the chat → ⋮ → More → Export chat → *Without media*. You get a `.txt`.
+Never used yaad before? Follow this top to bottom — it assumes nothing.
 
-**2. Install:**
-
+**Want to try it before exporting your own chat?** Skip straight to step 6 with the bundled sample:
 ```bash
-pip install -e .              # core: FTS search + analytics
-pip install -e ".[dense]"     # + semantic search (sentence-transformers)
-```
-
-**3. Ingest:**
-
-```bash
-yaad ingest "WhatsApp Chat with Goa Plan.txt" --db goa.db
-```
-
-**4. Ask:**
-
-```bash
-yaad chat --db goa.db                          # needs Ollama running locally
-yaad chat --db goa.db --provider anthropic     # or the Claude API
-```
-
-No LLM handy? These work standalone:
-
-```bash
-yaad stats --db goa.db          # who talks, monthly/hourly activity, top emojis
-yaad search "villa" --db goa.db --sender Priya --after 2025-10-01
-```
-
-Try it on the bundled sample first:
-
-```bash
+git clone https://github.com/kiran-gajjela/yaad.git && cd yaad
+pip install -e .
 yaad ingest examples/sample_chat.txt --db demo.db
-yaad chat --db demo.db
+yaad surprise --db demo.db
+```
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/kiran-gajjela/yaad.git
+cd yaad
+```
+
+### 2. Install yaad
+
+```bash
+pip install -e .              # core: FTS search + analytics, no LLM needed yet
+pip install -e ".[dense]"     # + semantic search (recommended — sentence-transformers)
+```
+
+### 3. Set up a local LLM
+
+yaad defaults to [Ollama](https://ollama.com) running fully on your machine — install it, then:
+
+```bash
+ollama serve                  # start it, if it isn't already running
+ollama pull llama3.2:3b       # or any model — see "LLM setup" below for other options
+```
+
+(Skip this if you'd rather use the Claude API instead — see "LLM setup" below.)
+
+### 4. Export your WhatsApp chat
+
+On your **phone**, open the specific chat or group you want to ask questions about:
+
+- **Android**: tap ⋮ (top right) → **More** → **Export chat**
+- **iPhone**: tap the chat/group name at the top → scroll down → **Export Chat**
+
+Choose **Without Media** — smaller file, faster, and yaad only reads the text anyway.
+
+> ⚠️ **If "Advanced Chat Privacy" is turned on for that chat, you can't export it at all.** WhatsApp disables the Export Chat option entirely while it's active — this is a real, documented WhatsApp behavior, not a yaad limitation. Any admin can turn it off first: open the chat → tap the chat name → **Advanced Chat Privacy** → toggle off. Then export.
+
+Get the exported `.txt` off your phone and onto the computer running yaad — email it to yourself, save it via Drive/iCloud, AirDrop, cable, whatever's easiest.
+
+### 5. Put the export where yaad can see it
+
+Create an `exports/` folder at the root of this repo (it's already in `.gitignore`, so a chat full of other people's messages never accidentally gets committed) and drop the file in:
+
+```bash
+mkdir -p exports
+```
+
+```
+yaad/
+└── exports/
+    └── WhatsApp Chat with Friends.txt   ← put it here
+```
+
+### 6. Ingest it
+
+```bash
+yaad ingest "exports/WhatsApp Chat with Friends.txt" --db mychat.db
+```
+
+This parses the export, groups messages into sessions, builds the search index, and creates one `mychat.db` SQLite file — everything for this chat lives in that single file.
+
+### 7. Sanity-check the parse (no LLM needed)
+
+```bash
+yaad stats --db mychat.db
+```
+
+Check the participant list, message count, and date range actually look right before trusting anything downstream.
+
+### 8. Ask it something — start with "surprise me"
+
+```bash
+yaad surprise --db mychat.db
+```
+
+No question to think of — it pulls a few genuinely interesting things out of the chat on its own: who's most active, a callback to the first message ever sent, that kind of thing.
+
+### 9. Then ask whatever you're actually curious about
+
+```bash
+yaad chat --db mychat.db
+```
+
+```
+you › who suggested the trip?
+you › what did we decide about the venue?
+you › summarize last week
+you › /quit
 ```
 
 ## LLM setup
