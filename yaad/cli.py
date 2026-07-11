@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import random
 import sys
+import threading
 
 from rich.console import Console
 from rich.panel import Panel
@@ -22,6 +24,42 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 console = Console()
+
+_THINKING_PHRASES = (
+    "thinking...",
+    "digging through your chats...",
+    "recalling the details...",
+    "connecting the dots...",
+    "checking who said what...",
+    "reading between the lines...",
+    "almost there...",
+)
+
+
+def _run_with_spinner(fn, *fn_args, **fn_kwargs):
+    """Run a slow, blocking call with a rich spinner that cycles fun status
+    text. `fn` itself runs on the current thread as normal - sqlite3
+    connections are bound to their creating thread, so the real work can't
+    move to a worker thread. Only the cosmetic text-cycling runs on a
+    background thread, ticking on a timer independent of the call below."""
+    phrases = list(_THINKING_PHRASES)
+    random.shuffle(phrases)
+    stop = threading.Event()
+
+    def cycle_text(status):
+        i = 1
+        while not stop.wait(timeout=2.5):
+            status.update(f"[bold cyan]{phrases[i % len(phrases)]}[/]")
+            i += 1
+
+    with console.status(f"[bold cyan]{phrases[0]}[/]", spinner="dots") as status:
+        updater = threading.Thread(target=cycle_text, args=(status,), daemon=True)
+        updater.start()
+        try:
+            return fn(*fn_args, **fn_kwargs)
+        finally:
+            stop.set()
+            updater.join(timeout=1)
 
 
 def _bar(value: float, max_value: float, width: int = 28) -> str:
@@ -100,7 +138,7 @@ def cmd_chat(args) -> int:
         if q.lower() in ("/quit", "/exit", "quit", "exit"):
             break
         try:
-            ans = engine.answer(q)
+            ans = _run_with_spinner(engine.answer, q)
         except LLMError as e:
             console.print(f"[red]{e}[/]")
             continue
@@ -111,6 +149,26 @@ def cmd_chat(args) -> int:
         if ans.sql:
             console.print(f"[dim]  sql: {ans.sql}[/]")
         console.print(ans.text + "\n")
+    return 0
+
+
+# ------------------------------------------------------------------- embed
+
+def cmd_embed(args) -> int:
+    try:
+        from .embed import build_dense_index
+    except ImportError as e:
+        console.print(f"[red]{e}[/]")
+        console.print("[dim]pip install 'yaad[dense]' to enable.[/]")
+        return 1
+
+    console.print("[dim]building dense index on existing chunks (no reparse)...[/]")
+    try:
+        n = build_dense_index(args.db, model_name=args.embed_model)
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/]")
+        return 1
+    console.print(f"[green]✓[/] embedded {n} chunks")
     return 0
 
 
@@ -202,6 +260,84 @@ def cmd_search(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- surprise
+
+def cmd_surprise(args) -> int:
+    from .surprise import generate_surprise
+
+    try:
+        llm = get_llm(args.provider, args.model)
+    except LLMError as e:
+        console.print(f"[red]{e}[/]")
+        return 1
+
+    con = connect(args.db, readonly=True)
+    console.print(f"[dim]asking {llm.name}/{llm.model}...[/]")
+    try:
+        text = _run_with_spinner(generate_surprise, con, llm)
+    except LLMError as e:
+        console.print(f"[red]{e}[/]")
+        return 1
+    finally:
+        con.close()
+
+    console.print(Panel(text, title="surprise me", title_align="left"))
+    return 0
+
+
+# -------------------------------------------------------------------- eval
+
+def cmd_eval(args) -> int:
+    from .engine import Engine
+    from .eval import EVAL_CASES, run_eval
+
+    try:
+        llm = get_llm(args.provider, args.model)
+    except LLMError as e:
+        console.print(f"[red]{e}[/]")
+        return 1
+
+    cases = EVAL_CASES
+    if args.category:
+        cases = [c for c in cases if c.category == args.category]
+        if not cases:
+            cats = sorted({c.category for c in EVAL_CASES})
+            console.print(f"[red]no cases in category {args.category!r} (have: {', '.join(cats)})[/]")
+            return 1
+
+    engine = Engine(args.db, llm=llm, dense=not args.no_dense)
+    console.print(f"[dim]running {len(cases)} eval cases against {llm.name}/{llm.model}...[/]\n")
+    results = run_eval(engine, cases)
+
+    t = Table(title="results")
+    for col in ("id", "category", "question", "pass", "reason", "answer"):
+        t.add_column(col, overflow="fold", max_width=None if col in ("id", "category", "pass") else 40)
+    for r in results:
+        mark = "[green]PASS[/]" if r.passed else "[red]FAIL[/]"
+        t.add_row(r.case.id, r.case.category, r.case.question, mark, r.reason, r.answer)
+    console.print(t)
+
+    by_cat: dict[str, list] = {}
+    for r in results:
+        by_cat.setdefault(r.case.category, []).append(r)
+
+    s = Table(title="summary by category")
+    for col in ("category", "passed", "total", "rate"):
+        s.add_column(col)
+    for cat, rs in sorted(by_cat.items()):
+        passed = sum(r.passed for r in rs)
+        s.add_row(cat, str(passed), str(len(rs)), f"{passed / len(rs) * 100:.0f}%")
+    total_passed = sum(r.passed for r in results)
+    s.add_row(
+        "[bold]overall[/]", f"[bold]{total_passed}[/]", f"[bold]{len(results)}[/]",
+        f"[bold]{total_passed / len(results) * 100:.0f}%[/]",
+    )
+    console.print()
+    console.print(s)
+
+    return 0 if total_passed == len(results) else 1
+
+
 # -------------------------------------------------------------------- main
 
 def build_parser() -> argparse.ArgumentParser:
@@ -223,6 +359,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pi.set_defaults(func=cmd_ingest)
 
+    pe_embed = sub.add_parser("embed", help="build/refresh the dense index on an already-ingested db")
+    pe_embed.add_argument("--db", default="chat.db")
+    pe_embed.add_argument(
+        "--embed-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="sentence-transformers model for dense retrieval",
+    )
+    pe_embed.set_defaults(func=cmd_embed)
+
     pc = sub.add_parser("chat", help="ask questions about the chat")
     pc.add_argument("--db", default="chat.db")
     pc.add_argument("--provider", default="ollama", choices=["ollama", "anthropic"])
@@ -243,6 +388,27 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--top-k", type=int, default=5)
     pq.add_argument("--no-dense", action="store_true")
     pq.set_defaults(func=cmd_search)
+
+    psu = sub.add_parser("surprise", help="a proactive, personalized recap - no question needed")
+    psu.add_argument("--db", default="chat.db")
+    psu.add_argument(
+        "--provider", default="ollama", choices=["ollama", "anthropic"],
+        help="small local models (~3B) misattribute facts on this task even with a hardened "
+             "prompt - stick to the default model class (gemma4:e4b) or bigger",
+    )
+    psu.add_argument("--model", default=None)
+    psu.set_defaults(func=cmd_surprise)
+
+    pe = sub.add_parser("eval", help="run the built-in retrieval/synthesis eval set against a live LLM")
+    pe.add_argument("--db", default="chat.db")
+    pe.add_argument("--provider", default="ollama", choices=["ollama", "anthropic"])
+    pe.add_argument("--model", default=None)
+    pe.add_argument("--no-dense", action="store_true")
+    pe.add_argument(
+        "--category", default=None,
+        help="only run one category: single_hop, cross_chunk, system_msg, grounding",
+    )
+    pe.set_defaults(func=cmd_eval)
 
     return p
 
