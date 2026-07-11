@@ -15,6 +15,12 @@ from .llm import LLMError, get_llm
 from .parser import parse_chat
 from .retrieve import hybrid_search
 
+# Windows' legacy console defaults to cp1252, which can't encode the unicode
+# glyphs (✓, ›, █, ...) rich writes. Force UTF-8 so output doesn't crash.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 console = Console()
 
 
