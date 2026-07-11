@@ -37,6 +37,10 @@ column, only `sender, messages, media, avg_chars, first_day, last_day`.
 Never reference a messages/sessions column against a view unless that
 exact column is listed for that view. If you need raw per-message columns
 (id, text, is_media, date, ts), query the messages table directly instead.
+v_sender_stats.messages is ALREADY the per-sender message count - to get
+one sender's count, SELECT messages FROM v_sender_stats WHERE sender=X;
+never wrap it in COUNT(*), which just counts matching rows in the view
+(always 1 for a single sender) and silently gives the wrong number.
 """.strip()
 
 
