@@ -76,51 +76,39 @@
   .section-lede { color: var(--text-dim); max-width: 68ch; font-size: 16px; margin: 0 0 36px; }
 
   /* ---------------------------------------------------------------- hero */
+  /* Desktop: exactly the original 2-column grid, untouched - .hero-text
+     and .hero-media are its only two direct children, so this can't be
+     affected by whatever ordering trick mobile below needs. */
   .hero {
     padding: 44px 0 48px;
     border-top: none;
     display: grid;
     grid-template-columns: 1.05fr 1fr;
-    gap: 12px 36px;
+    gap: 36px;
+    align-items: center;
   }
-  /* .hero-text has no box of its own on desktop - its children become
-     direct grid items of .hero, so .hero-media (though it sits in the DOM
-     between .sub and .cta-row, for correct mobile order) can still be
-     pulled into a full-height right-hand column. */
-  .hero-text { display: contents; }
-  .hero-text > .wordmark,
-  .hero-text > .eyebrow,
-  .hero-text > h1,
-  .hero-text > .sub,
-  .hero-text > .cta-row {
-    grid-column: 1;
-  }
-  .hero-text > .wordmark { align-self: end; }
-  .hero-text > .cta-row { align-self: start; }
   .hero-media {
-    grid-column: 2;
-    grid-row: 1 / -1;
-    align-self: center;
     border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--line);
     box-shadow: var(--shadow);
     line-height: 0;
   }
-  @media (max-width: 860px) {
-    .hero { grid-template-columns: 1fr; }
-    .hero-text > .wordmark,
-    .hero-text > .eyebrow,
-    .hero-text > h1,
-    .hero-text > .sub,
-    .hero-text > .cta-row,
-    .hero-media {
-      grid-column: 1;
-      grid-row: auto;
-      align-self: auto;
-    }
-  }
   .hero-media video { width: 100%; height: auto; display: block; }
+  /* Mobile only: flatten .hero-text so its children and .hero-media (a
+     sibling in the DOM) become one shared flex sequence, then reorder
+     with `order` so the video lands between the tagline and the buttons -
+     none of this runs or matters above the breakpoint. */
+  @media (max-width: 860px) {
+    .hero { display: flex; flex-direction: column; gap: 12px; }
+    .hero-text { display: contents; }
+    .hero-text > .wordmark { order: 1; margin-bottom: 0; }
+    .hero-text > .eyebrow { order: 2; margin-bottom: 0; }
+    .hero-text > h1 { order: 3; margin-bottom: 0; }
+    .hero-text > .sub { order: 4; margin-bottom: 0; }
+    .hero-media { order: 5; }
+    .hero-text > .cta-row { order: 6; }
+  }
   .wordmark {
     display: flex;
     align-items: baseline;
@@ -381,16 +369,16 @@
       <p class="eyebrow">Lost in endless conversations?</p>
       <h1>Instantly recall anything from your chats.</h1>
       <p class="sub">On-device. Grounded. Efficient.</p>
-      <div class="hero-media">
-        <video autoplay loop muted playsinline preload="auto" aria-label="yaad chat demo — asking questions about a WhatsApp export in the terminal">
-          <source src="demo.webm" type="video/webm">
-          <source src="demo.mp4" type="video/mp4">
-        </video>
-      </div>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
         <a class="btn btn-secondary" href="#architecture">See the architecture</a>
       </div>
+    </div>
+    <div class="hero-media">
+      <video autoplay loop muted playsinline preload="auto" aria-label="yaad chat demo — asking questions about a WhatsApp export in the terminal">
+        <source src="demo.webm" type="video/webm">
+        <source src="demo.mp4" type="video/mp4">
+      </video>
     </div>
   </header>
 
