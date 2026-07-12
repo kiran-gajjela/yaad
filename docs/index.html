@@ -81,19 +81,44 @@
     border-top: none;
     display: grid;
     grid-template-columns: 1.05fr 1fr;
-    gap: 36px;
-    align-items: center;
+    gap: 12px 36px;
   }
-  @media (max-width: 860px) {
-    .hero { grid-template-columns: 1fr; }
-    .hero-media { order: -1; }
+  /* .hero-text has no box of its own on desktop - its children become
+     direct grid items of .hero, so .hero-media (though it sits in the DOM
+     between .sub and .cta-row, for correct mobile order) can still be
+     pulled into a full-height right-hand column. */
+  .hero-text { display: contents; }
+  .hero-text > .wordmark,
+  .hero-text > .eyebrow,
+  .hero-text > h1,
+  .hero-text > .sub,
+  .hero-text > .cta-row {
+    grid-column: 1;
   }
+  .hero-text > .wordmark { align-self: end; }
+  .hero-text > .cta-row { align-self: start; }
   .hero-media {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: center;
     border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--line);
     box-shadow: var(--shadow);
     line-height: 0;
+  }
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-text > .wordmark,
+    .hero-text > .eyebrow,
+    .hero-text > h1,
+    .hero-text > .sub,
+    .hero-text > .cta-row,
+    .hero-media {
+      grid-column: 1;
+      grid-row: auto;
+      align-self: auto;
+    }
   }
   .hero-media video { width: 100%; height: auto; display: block; }
   .wordmark {
@@ -180,6 +205,10 @@
     display: block;
   }
   .metric .lbl { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; display: block; line-height: 1.4; }
+  .metric-mobile-only { display: none; }
+  @media (max-width: 640px) {
+    .metric-mobile-only { display: block; }
+  }
 
   /* --------------------------------------------------------------- story */
   .story-card {
@@ -352,16 +381,16 @@
       <p class="eyebrow">Lost in endless conversations?</p>
       <h1>Instantly recall anything from your chats.</h1>
       <p class="sub">On-device. Grounded. Efficient.</p>
+      <div class="hero-media">
+        <video autoplay loop muted playsinline preload="auto" aria-label="yaad chat demo — asking questions about a WhatsApp export in the terminal">
+          <source src="demo.webm" type="video/webm">
+          <source src="demo.mp4" type="video/mp4">
+        </video>
+      </div>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
         <a class="btn btn-secondary" href="#architecture">See the architecture</a>
       </div>
-    </div>
-    <div class="hero-media">
-      <video autoplay loop muted playsinline preload="auto" aria-label="yaad chat demo — asking questions about a WhatsApp export in the terminal">
-        <source src="demo.webm" type="video/webm">
-        <source src="demo.mp4" type="video/mp4">
-      </video>
     </div>
   </header>
 
@@ -370,7 +399,7 @@
       <div class="metric"><span class="num">∞</span><span class="lbl">solve your infinite scroll problem</span></div>
       <div class="metric"><span class="num">1</span><span class="lbl">SQLite file per chat, nothing else to run</span></div>
       <div class="metric"><span class="num">0</span><span class="lbl">cloud calls by default</span></div>
-      <div class="metric"><span class="num">7</span><span class="lbl">and you know the reason 😉</span></div>
+      <div class="metric metric-mobile-only"><span class="num">7</span><span class="lbl">and you know the reason 😉</span></div>
     </div>
   </section>
 
