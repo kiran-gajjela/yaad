@@ -95,7 +95,7 @@
     box-shadow: var(--shadow);
     line-height: 0;
   }
-  .hero-media img { width: 100%; height: auto; display: block; }
+  .hero-media video { width: 100%; height: auto; display: block; }
   .wordmark {
     display: flex;
     align-items: baseline;
@@ -358,7 +358,10 @@
       </div>
     </div>
     <div class="hero-media">
-      <img src="demo.gif" alt="yaad chat demo — asking questions about a WhatsApp export in the terminal" loading="lazy">
+      <video autoplay loop muted playsinline preload="auto" aria-label="yaad chat demo — asking questions about a WhatsApp export in the terminal">
+        <source src="demo.webm" type="video/webm">
+        <source src="demo.mp4" type="video/mp4">
+      </video>
     </div>
   </header>
 
