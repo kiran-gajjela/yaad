@@ -76,7 +76,26 @@
   .section-lede { color: var(--text-dim); max-width: 68ch; font-size: 16px; margin: 0 0 36px; }
 
   /* ---------------------------------------------------------------- hero */
-  .hero { padding: 44px 0 48px; border-top: none; }
+  .hero {
+    padding: 44px 0 48px;
+    border-top: none;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 36px;
+    align-items: center;
+  }
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-media { order: -1; }
+  }
+  .hero-media {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    line-height: 0;
+  }
+  .hero-media img { width: 100%; height: auto; display: block; }
   .wordmark {
     display: flex;
     align-items: baseline;
@@ -323,18 +342,23 @@
 <div class="wrap">
 
   <header class="hero">
-    <div class="wordmark">
-      <span class="en">yaad</span><span class="hi">याद</span>
-      <button class="sound-btn" type="button" onclick="playYaadChime()" aria-label="hear yaad">
-        <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/></svg>
-      </button>
+    <div class="hero-text">
+      <div class="wordmark">
+        <span class="en">yaad</span><span class="hi">याद</span>
+        <button class="sound-btn" type="button" onclick="playYaadChime()" aria-label="hear yaad">
+          <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/></svg>
+        </button>
+      </div>
+      <p class="eyebrow">Lost in endless conversations?</p>
+      <h1>Instantly recall anything from your chats.</h1>
+      <p class="sub">On-device. Grounded. Efficient.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        <a class="btn btn-secondary" href="#architecture">See the architecture</a>
+      </div>
     </div>
-    <p class="eyebrow">Lost in endless conversations?</p>
-    <h1>Instantly recall anything from your chats.</h1>
-    <p class="sub">On-device. Grounded. Efficient.</p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/kiran-gajjela/yaad" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-      <a class="btn btn-secondary" href="#architecture">See the architecture</a>
+    <div class="hero-media">
+      <img src="demo.gif" alt="yaad chat demo — asking questions about a WhatsApp export in the terminal" loading="lazy">
     </div>
   </header>
 
